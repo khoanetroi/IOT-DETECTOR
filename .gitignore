@@ -1,0 +1,20 @@
+# ─── Data (quá lớn, không push) ───
+flows/
+*.csv
+
+# ─── Model checkpoints ───
+experiments/*.pth
+
+# ─── Python portable runtime ───
+python-embed/
+
+# ─── Logs & temp ───
+*.log
+*.txt
+!requirements.txt
+__pycache__/
+*.pyc
+
+# ─── IDE ───
+.vscode/
+.idea/

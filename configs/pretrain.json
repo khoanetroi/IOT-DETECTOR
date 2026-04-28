@@ -1,0 +1,29 @@
+{
+    "_comment": "Pretrain config for IoT Device Fingerprinting via Contrastive Learning",
+
+    "data": {
+        "data_dir": "flows",
+        "max_files": 5,
+        "window_size": 10,
+        "mask_prob": 0.15,
+        "val_ratio": 0.1
+    },
+
+    "model": {
+        "d_model": 128,
+        "nhead": 4,
+        "num_layers": 3,
+        "dim_feedforward": 256,
+        "dropout": 0.1,
+        "proj_dim": 64
+    },
+
+    "training": {
+        "batch_size": 128,
+        "num_epochs": 10,
+        "learning_rate": 0.0003,
+        "weight_decay": 0.0001,
+        "temperature": 0.5,
+        "checkpoint_dir": "experiments"
+    }
+}

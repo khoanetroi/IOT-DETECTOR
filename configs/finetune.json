@@ -1,0 +1,25 @@
+{
+    "_comment": "Fine-tuning config: Supervised classification on top of pre-trained encoder",
+
+    "data": {
+        "data_dir": "flows",
+        "max_files": 0,
+        "window_size": 10,
+        "val_ratio": 0.2,
+        "test_ratio": 0.1
+    },
+
+    "model": {
+        "pretrain_checkpoint": "experiments/pretrain_best.pth",
+        "freeze_encoder_epochs": 5,
+        "unfreeze_lr_factor": 0.1
+    },
+
+    "training": {
+        "batch_size": 128,
+        "num_epochs": 25,
+        "learning_rate": 0.001,
+        "weight_decay": 0.0001,
+        "checkpoint_dir": "experiments"
+    }
+}
