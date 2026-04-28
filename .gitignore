@@ -2,8 +2,9 @@
 flows/
 *.csv
 
-# ─── Model checkpoints ───
-experiments/*.pth
+# ─── Model checkpoints (chỉ giữ best, bỏ per-epoch) ───
+experiments/pretrain_epoch_*.pth
+experiments/finetune_epoch_*.pth
 
 # ─── Python portable runtime ───
 python-embed/
