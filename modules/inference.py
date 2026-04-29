@@ -68,11 +68,15 @@ class IoTFingerprinter:
         self.model.to(self.device)
         self.model.eval()
 
-        # Store scaler params (mean/std from training) for normalisation
-        # For simplicity, we normalise per-batch at inference time
+        # Load scaler from checkpoint (same normalisation as training)
+        self.scaler_mean = np.array(ckpt.get("scaler_mean", None))
+        self.scaler_scale = np.array(ckpt.get("scaler_scale", None))
+        has_scaler = self.scaler_mean is not None and self.scaler_scale is not None
+
         print(f"[IoTFingerprinter] Model loaded: {self.num_classes} device classes")
         print(f"  Features: {self.feature_cols}")
         print(f"  Window size: {self.window_size}")
+        print(f"  Scaler: {'from training data' if has_scaler else 'per-file (fallback)'}")
         print(f"  Device: {self.device}")
 
     def _preprocess(self, df: pd.DataFrame) -> np.ndarray:
@@ -85,10 +89,13 @@ class IoTFingerprinter:
 
         data = df[cols].fillna(0).astype(np.float32).values
 
-        # Simple z-score normalisation (per-column)
-        mean = data.mean(axis=0)
-        std = data.std(axis=0) + 1e-8
-        data = (data - mean) / std
+        # Use training scaler if available, else fallback to per-file z-score
+        if self.scaler_mean is not None and self.scaler_scale is not None:
+            data = (data - self.scaler_mean) / (self.scaler_scale + 1e-8)
+        else:
+            mean = data.mean(axis=0)
+            std = data.std(axis=0) + 1e-8
+            data = (data - mean) / std
 
         # Window
         n = len(data) // self.window_size

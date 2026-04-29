@@ -218,6 +218,8 @@ def main():
                 "num_classes": num_classes,
                 "idx_to_device": idx_to_device,
                 "feature_cols": feature_cols,
+                "scaler_mean": scaler.mean_.tolist(),
+                "scaler_scale": scaler.scale_.tolist(),
                 "config": cfg,
                 "pretrain_config": checkpoint["config"],
             }, best_path)
