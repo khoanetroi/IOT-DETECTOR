@@ -146,7 +146,17 @@ class IoTFingerprinter:
                 # Use class-specific adaptive threshold if available, else fallback
                 dynamic_threshold = self.class_thresholds.get(pred_name, self.fallback_dist_threshold)
                 
-                is_unknown = (dist > dynamic_threshold) or (float(conf) < self.conf_threshold)
+                # 1. Base threshold (if dist > max allowed for this class -> UNKNOWN)
+                cond1 = dist > dynamic_threshold
+                
+                # 2. Base confidence (if conf < 35% -> UNKNOWN)
+                cond2 = float(conf) < 0.35
+                
+                # 3. High-Distance Margin (If distance is quite high > 0.45, it MUST be highly confident > 88%)
+                # Malware typically falls in the dist 0.48-0.50 range with confidence 80-87%.
+                cond3 = (dist > 0.45) and (float(conf) < 0.88)
+                
+                is_unknown = cond1 or cond2 or cond3
             elif self.centroids:
                 is_unknown = True
 

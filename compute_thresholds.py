@@ -73,15 +73,12 @@ def main():
     for name, embs in class_embeddings.items():
         centroid = np.array(centroids[name])
         distances = [float(cosine(emb, centroid)) for emb in embs]
-        # Use mean + 2.5 * std, capped between 0.15 and 0.45
-        # This prevents the threshold from becoming too large (which would allow malware to pass)
-        # Malware typically has a distance of > 0.48
-        mean_dist = np.mean(distances)
-        std_dist = np.std(distances)
-        dynamic_thresh = mean_dist + 2.5 * std_dist
+        # Use 90th percentile to get the core cluster, ignoring the long tail
+        p90_dist = np.percentile(distances, 90)
         
-        # Clamp threshold to avoid overfitting and underfitting
-        dynamic_thresh = max(0.15, min(dynamic_thresh, 0.45))
+        # Add a 15% margin to the 90th percentile, clamp between 0.15 and 0.65
+        dynamic_thresh = p90_dist * 1.15
+        dynamic_thresh = max(0.15, min(dynamic_thresh, 0.65))
         
         class_thresholds[name] = float(dynamic_thresh)
         print(f"  {name}: threshold = {class_thresholds[name]:.4f}")
