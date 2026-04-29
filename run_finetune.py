@@ -249,7 +249,32 @@ def main():
         f.write(f"Test Accuracy: {test_acc:.4f}\n")
         f.write(f"Test Loss: {test_loss:.4f}\n\n")
         f.write(report)
-    print(f"  Report saved -> {report_path}")
+    # ── 7. Compute centroids for anomaly detection ──────────
+    print(f"\n[Step 7] Computing class centroids for anomaly detection...")
+    model.eval()
+    from collections import defaultdict
+    class_embeddings = defaultdict(list)
+
+    with torch.no_grad():
+        for x, y in train_loader:
+            x = x.to(device)
+            emb = model.encoder.encode(x)  # [B, d_model]
+            for i in range(len(y)):
+                label_name = idx_to_device[int(y[i])]
+                class_embeddings[label_name].append(emb[i].cpu().numpy())
+
+    centroids = {}
+    for name, embs in class_embeddings.items():
+        centroids[name] = np.mean(embs, axis=0).tolist()
+
+    centroid_path = os.path.join(ckpt_dir, "centroids.pt")
+    torch.save(centroids, centroid_path)
+    print(f"  Saved {len(centroids)} centroids -> {centroid_path}")
+
+    # Also save centroids into the best checkpoint
+    best_ckpt["centroids"] = centroids
+    torch.save(best_ckpt, best_path)
+    print(f"  Centroids added to {best_path}")
 
     print(f"\n{'='*60}")
     print(f"  FINE-TUNING COMPLETE!")

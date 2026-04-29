@@ -21,6 +21,7 @@ import sys
 import numpy as np
 import pandas as pd
 import torch
+from scipy.spatial.distance import cosine
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -73,10 +74,16 @@ class IoTFingerprinter:
         self.scaler_scale = np.array(ckpt.get("scaler_scale", None))
         has_scaler = self.scaler_mean is not None and self.scaler_scale is not None
 
+        # Load centroids for anomaly detection
+        self.centroids = ckpt.get("centroids", None)
+        self.conf_threshold = 0.50
+        self.dist_threshold = 0.55
+
         print(f"[IoTFingerprinter] Model loaded: {self.num_classes} device classes")
         print(f"  Features: {self.feature_cols}")
         print(f"  Window size: {self.window_size}")
         print(f"  Scaler: {'from training data' if has_scaler else 'per-file (fallback)'}")
+        print(f"  Anomaly detection: {'ENABLED (' + str(len(self.centroids)) + ' centroids)' if self.centroids else 'DISABLED (no centroids)'}")
         print(f"  Device: {self.device}")
 
     def _preprocess(self, df: pd.DataFrame) -> np.ndarray:
@@ -111,19 +118,38 @@ class IoTFingerprinter:
     def predict(self, windows: np.ndarray) -> list[dict]:
         """
         Predict device for each window.
+        Includes anomaly detection via centroid cosine distance.
         
-        Returns list of dicts with 'device', 'confidence', 'class_id'.
+        Returns list of dicts with 'device', 'confidence', 'distance', 'is_unknown'.
         """
         tensor = torch.from_numpy(windows).float().to(self.device)
         logits = self.model(tensor)
         probs = torch.softmax(logits, dim=1)
         confs, preds = probs.max(dim=1)
 
+        # Get embeddings for anomaly detection
+        embeddings = self.model.encoder.encode(tensor).cpu().numpy()
+
         results = []
-        for pred, conf in zip(preds.cpu().numpy(), confs.cpu().numpy()):
+        for i, (pred, conf) in enumerate(zip(preds.cpu().numpy(), confs.cpu().numpy())):
+            pred_name = self.idx_to_device[int(pred)]
+            dist = 999.0
+            is_unknown = False
+
+            # Centroid-based anomaly check
+            if self.centroids and pred_name in self.centroids:
+                centroid = np.array(self.centroids[pred_name])
+                dist = float(cosine(embeddings[i].flatten(), centroid.flatten()))
+                is_unknown = (dist > self.dist_threshold) or (float(conf) < self.conf_threshold)
+            elif self.centroids:
+                is_unknown = True
+
             results.append({
-                "device": self.idx_to_device[int(pred)],
+                "device": "UNKNOWN_DEVICE" if is_unknown else pred_name,
+                "predicted_class": pred_name,
                 "confidence": float(conf),
+                "distance": dist,
+                "is_unknown": is_unknown,
                 "class_id": int(pred),
             })
         return results
@@ -132,6 +158,7 @@ class IoTFingerprinter:
         """
         Load a CSV file, predict the dominant device type.
         Uses majority voting across all windows.
+        Flags unknown devices via anomaly detection.
         """
         df = pd.read_csv(csv_path)
         windows = self._preprocess(df)
@@ -142,12 +169,21 @@ class IoTFingerprinter:
         votes = Counter(r["device"] for r in results)
         dominant = votes.most_common(1)[0]
         avg_conf = np.mean([r["confidence"] for r in results if r["device"] == dominant[0]])
+        avg_dist = np.mean([r["distance"] for r in results if r["device"] == dominant[0]])
+        unknown_ratio = sum(1 for r in results if r["is_unknown"]) / len(results)
+
+        # If majority is UNKNOWN or high unknown ratio, flag whole file
+        is_file_unknown = dominant[0] == "UNKNOWN_DEVICE" or unknown_ratio > 0.5
 
         return {
             "predicted_device": dominant[0],
             "vote_count": dominant[1],
             "total_windows": len(results),
             "average_confidence": float(avg_conf),
+            "average_distance": float(avg_dist),
+            "unknown_ratio": float(unknown_ratio),
+            "is_unknown": is_file_unknown,
+            "status": "⚠️ UNKNOWN DEVICE" if is_file_unknown else "✅ VERIFIED",
             "all_votes": dict(votes),
         }
 
