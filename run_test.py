@@ -28,7 +28,12 @@ from modules.inference import IoTFingerprinter
 def test_single(fp, csv_path, expect_unknown=False):
     """Test a single CSV file."""
     filename = os.path.basename(csv_path)
-    true_device = filename.split("_")[0]
+    # Handle both formats: "AmazonEcho_xxx_flows.csv" and "test_AmazonEcho.csv"
+    name_no_ext = filename.replace(".csv", "")
+    if name_no_ext.startswith("test_"):
+        true_device = name_no_ext[5:]  # strip "test_"
+    else:
+        true_device = name_no_ext.split("_")[0]
 
     try:
         result = fp.predict_from_csv(csv_path)

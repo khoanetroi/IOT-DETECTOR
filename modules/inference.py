@@ -72,18 +72,20 @@ class IoTFingerprinter:
         # Load scaler from checkpoint (same normalisation as training)
         self.scaler_mean = np.array(ckpt.get("scaler_mean", None))
         self.scaler_scale = np.array(ckpt.get("scaler_scale", None))
-        has_scaler = self.scaler_mean is not None and self.scaler_scale is not None
+        has_scaler = self.scaler_mean.size > 1 and self.scaler_scale.size > 1
 
-        # Load centroids for anomaly detection
+        # Load centroids and adaptive thresholds for anomaly detection
         self.centroids = ckpt.get("centroids", None)
+        self.class_thresholds = ckpt.get("class_thresholds", {})
         self.conf_threshold = 0.50
-        self.dist_threshold = 0.55
+        # dist_threshold is now adaptive, keeping fallback just in case
+        self.fallback_dist_threshold = 0.55
 
         print(f"[IoTFingerprinter] Model loaded: {self.num_classes} device classes")
         print(f"  Features: {self.feature_cols}")
         print(f"  Window size: {self.window_size}")
         print(f"  Scaler: {'from training data' if has_scaler else 'per-file (fallback)'}")
-        print(f"  Anomaly detection: {'ENABLED (' + str(len(self.centroids)) + ' centroids)' if self.centroids else 'DISABLED (no centroids)'}")
+        print(f"  Anomaly detection: {'ENABLED (' + str(len(self.centroids)) + ' adaptive centroids)' if self.centroids else 'DISABLED (no centroids)'}")
         print(f"  Device: {self.device}")
 
     def _preprocess(self, df: pd.DataFrame) -> np.ndarray:
@@ -140,7 +142,11 @@ class IoTFingerprinter:
             if self.centroids and pred_name in self.centroids:
                 centroid = np.array(self.centroids[pred_name])
                 dist = float(cosine(embeddings[i].flatten(), centroid.flatten()))
-                is_unknown = (dist > self.dist_threshold) or (float(conf) < self.conf_threshold)
+                
+                # Use class-specific adaptive threshold if available, else fallback
+                dynamic_threshold = self.class_thresholds.get(pred_name, self.fallback_dist_threshold)
+                
+                is_unknown = (dist > dynamic_threshold) or (float(conf) < self.conf_threshold)
             elif self.centroids:
                 is_unknown = True
 

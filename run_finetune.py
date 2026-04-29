@@ -263,18 +263,34 @@ def main():
                 label_name = idx_to_device[int(y[i])]
                 class_embeddings[label_name].append(emb[i].cpu().numpy())
 
+    from scipy.spatial.distance import cosine
     centroids = {}
     for name, embs in class_embeddings.items():
         centroids[name] = np.mean(embs, axis=0).tolist()
 
-    centroid_path = os.path.join(ckpt_dir, "centroids.pt")
-    torch.save(centroids, centroid_path)
-    print(f"  Saved {len(centroids)} centroids -> {centroid_path}")
+    # Calculate adaptive distance thresholds for each class (max distance in training data + small margin)
+    class_thresholds = {}
+    for name, embs in class_embeddings.items():
+        centroid = np.array(centroids[name])
+        distances = [float(cosine(emb, centroid)) for emb in embs]
+        # Use 99th percentile or max to avoid outliers, plus a 10% margin
+        max_dist = np.percentile(distances, 99)
+        class_thresholds[name] = max_dist * 1.15
 
-    # Also save centroids into the best checkpoint
+    anomaly_data = {
+        "centroids": centroids,
+        "class_thresholds": class_thresholds
+    }
+
+    centroid_path = os.path.join(ckpt_dir, "anomaly_data.pt")
+    torch.save(anomaly_data, centroid_path)
+    print(f"  Saved {len(centroids)} centroids and thresholds -> {centroid_path}")
+
+    # Also save into the best checkpoint
     best_ckpt["centroids"] = centroids
+    best_ckpt["class_thresholds"] = class_thresholds
     torch.save(best_ckpt, best_path)
-    print(f"  Centroids added to {best_path}")
+    print(f"  Anomaly data added to {best_path}")
 
     print(f"\n{'='*60}")
     print(f"  FINE-TUNING COMPLETE!")
